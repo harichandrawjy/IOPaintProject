@@ -32,7 +32,7 @@ def detect(image_path, category="person"):
     return detections
 
 if __name__ == "__main__":
-    image_path = "test.jpg"
+    image_path = "image/test.jpg"
     dets = detect(image_path, "person")
     print("Detected ids:", [d["id"] for d in dets])
 
@@ -42,5 +42,5 @@ if __name__ == "__main__":
 
     img = cv2.imread(image_path)
     mask = build_mask(dets, remove_ids, img.shape)
-    cv2.imwrite("mask.png", mask)
+    cv2.imwrite("result/mask.png", mask)
     print("Saved mask.png — white areas are what gets erased")
