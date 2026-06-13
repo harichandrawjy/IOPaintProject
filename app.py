@@ -4,6 +4,7 @@ import os
 from detect_category import detect, build_mask, model
 from iopaint_client import erase
 from privacy import redact
+from background_blur import portrait_blur
 
 os.makedirs("outputs", exist_ok=True)
 COCO_CLASSES = sorted(model.names.values())   # the 80 categories, straight from the model
@@ -13,7 +14,7 @@ st.markdown("<style>.stButton>button{border-radius:10px;font-weight:600;padding:
             unsafe_allow_html=True)
 st.title("🧹 AI Photo Cleanup")
 
-tab_cat, tab_priv = st.tabs(["Category Removal", "Privacy Blur"])
+tab_cat, tab_priv, tab_bg = st.tabs(["Category Removal", "Privacy Blur", "Background Blur"])
 
 # ---------------- Category Removal ----------------
 with tab_cat:
@@ -22,12 +23,14 @@ with tab_cat:
         st.session_state.detections = None
 
     uploaded = st.file_uploader("Upload a photo", type=["jpg", "jpeg", "png"], key="cat_up")
-    category = st.selectbox("Category to detect", COCO_CLASSES)
 
     if uploaded is not None:
         image_path = "outputs/upload.jpg"
         with open(image_path, "wb") as f:
             f.write(uploaded.getbuffer())
+        st.image(image_path, caption="Uploaded image", width=400)
+
+        category = st.selectbox("Category to detect", COCO_CLASSES)
 
         if st.button("1. Detect", type="primary", key="cat_detect"):
             st.session_state.detections = detect(image_path, category)
@@ -68,14 +71,17 @@ with tab_cat:
 with tab_priv:
     st.caption("Automatically blur faces and license plates. (No IOPaint needed.)")
     p_uploaded = st.file_uploader("Upload a photo", type=["jpg", "jpeg", "png"], key="priv_up")
-    c1, c2 = st.columns(2)
-    blur_faces = c1.checkbox("Blur faces", value=True)
-    blur_plates = c2.checkbox("Blur license plates", value=True)
 
     if p_uploaded is not None:
         p_path = "outputs/priv_upload.jpg"
         with open(p_path, "wb") as f:
             f.write(p_uploaded.getbuffer())
+        st.image(p_path, caption="Uploaded image", width=400)
+
+        c1, c2 = st.columns(2)
+        blur_faces = c1.checkbox("Blur faces", value=True)
+        blur_plates = c2.checkbox("Blur license plates", value=True)
+
         if st.button("Blur", type="primary", key="priv_blur"):
             with st.spinner("Detecting and blurring…"):
                 result, n = redact(p_path, blur_faces, blur_plates)
@@ -83,3 +89,29 @@ with tab_priv:
             _, buf = cv2.imencode(".jpg", result)
             st.download_button("Download result", buf.tobytes(),
                                "redacted.jpg", "image/jpeg", key="priv_dl")
+
+# ---------------- Background Blur (Portrait Mode) ----------------
+with tab_bg:
+    st.caption("Keep your subject sharp and blur the background — like portrait mode.")
+    bg_uploaded = st.file_uploader("Upload a photo", type=["jpg", "jpeg", "png"], key="bg_up")
+
+    if bg_uploaded is not None:
+        bg_path = "outputs/bg_upload.jpg"
+        with open(bg_path, "wb") as f:
+            f.write(bg_uploaded.getbuffer())
+        st.image(bg_path, caption="Uploaded image", width=400)
+
+        subject = st.selectbox("Subject to keep sharp", COCO_CLASSES, key="bg_subject")
+        strength = st.slider("Blur strength", 11, 151, 51, step=10, key="bg_strength")
+
+        if st.button("Apply portrait blur", type="primary", key="bg_blur"):
+            with st.spinner("Detecting subject and blurring background…"):
+                result, n = portrait_blur(bg_path, subject, blur_strength=strength)
+            if n == 0:
+                st.warning(f"No '{subject}' found to keep sharp — try a different subject.")
+            else:
+                st.image(cv2.cvtColor(result, cv2.COLOR_BGR2RGB),
+                         caption=f"Kept {n} '{subject}' sharp, blurred the rest")
+                _, buf = cv2.imencode(".jpg", result)
+                st.download_button("Download result", buf.tobytes(),
+                                   "portrait.jpg", "image/jpeg", key="bg_dl")
